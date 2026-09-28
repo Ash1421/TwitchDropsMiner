@@ -27,7 +27,8 @@ default_webui_translation: dict[str, Any] = {
     "webui": {
         "settings": {
             "advanced": {
-                "priority_link_override": "Mine unlinked games from the Priority List: "
+                "priority_link_override": "Mine unlinked games from the Priority List: ",
+                "priority_badge_override": "Mine badge/emote drops for Priority List games: ",
             },
             "general": {"language": "Language: ", "invalid_proxy": "Invalid proxy URL"},
         },

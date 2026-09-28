@@ -13,6 +13,7 @@ import inventory as _inventory
 import webui.translations  # noqa
 
 _settings.default_settings["priority_link_override"] = False  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["priority_badge_override"] = False  # type: ignore[typeddict-unknown-key]
 
 
 def _priority_link_override_get(self) -> bool:
@@ -37,9 +38,45 @@ setattr(
 )
 
 
+def _priority_badge_override_get(self) -> bool:
+    """
+    True when the user has enabled the advanced "priority badge override"
+    setting and explicitly added this game's badge/emote campaign to the
+    Priority List.
+
+    Badge and emote campaigns are only payable when the account already owns
+    the badge/emote being awarded, which is why upstream gates them behind the
+    broad ``enable_badges_emotes`` switch instead of the account-link state.
+    This narrows that gate to the games the user opted into.
+
+    Like the link override above, this does not change Twitch's own rules: if
+    the account is not actually linked, or does not own the badge, Twitch will
+    still refuse to award the drop.
+    """
+    return (
+        self._twitch.settings.priority_badge_override
+        and self.game.name in self._twitch.settings.priority
+    )
+
+
+setattr(
+    _inventory.DropsCampaign,
+    "priority_badge_override",
+    property(_priority_badge_override_get),
+)
+
+
 def _eligible_get(self) -> bool:
-    return _original_eligible(self) or (
-        not self.has_badge_or_emote and self.priority_link_override
+    return (
+        _original_eligible(self)
+        or (
+            not self.has_badge_or_emote
+            and self.priority_link_override
+        )
+        or (
+            self.has_badge_or_emote
+            and self.priority_badge_override
+        )
     )
 
 
