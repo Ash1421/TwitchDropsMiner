@@ -76,6 +76,22 @@ OLED = Theme(
 THEMES: dict[str, Theme] = {t.name: t for t in (LIGHT, DARK, OLED)}
 DEFAULT_THEME = DARK.name
 
+# Upstream hardcodes slate utility classes on individual elements (the header
+# bar, the inventory panel) rather than going through default_classes, so
+# those are overridden here by CSS selector instead. That keeps every palette
+# decision inside this module instead of editing a dozen call sites.
+#
+# Maps the utility class to the Theme field that should colour it.
+SLATE_SURFACES: dict[str, str] = {
+    "bg-slate-100": "surface",
+    "bg-slate-200": "surface_alt",
+    "bg-slate-300": "surface_alt",
+    "dark\\:bg-slate-500": "surface_alt",
+    "dark\\:bg-slate-700": "surface",
+    "dark\\:bg-slate-800": "surface_alt",
+    "dark\\:bg-slate-900": "page",
+}
+
 
 def resolve(settings: Any) -> Theme:
     """
@@ -88,6 +104,23 @@ def resolve(settings: Any) -> Theme:
     if name in THEMES:
         return THEMES[name]
     return DARK if getattr(settings, "dark_mode", False) else LIGHT
+
+
+def _slate_overrides(theme: Theme) -> str:
+    """
+    CSS rules recolouring upstream's hardcoded slate utilities.
+
+    Only the variant that matches the active mode is emitted, so light themes
+    are not dragged dark by the ``dark:`` prefixed rules and vice versa.
+    """
+    rules = []
+    for class_name, field in SLATE_SURFACES.items():
+        is_dark_variant = class_name.startswith("dark\\:")
+        if is_dark_variant != theme.dark:
+            continue
+        color = getattr(theme, field)
+        rules.append(f".{class_name} {{ background-color: {color}; }}")
+    return "\n".join(rules)
 
 
 def apply(theme: Theme) -> None:
@@ -117,5 +150,6 @@ def apply(theme: Theme) -> None:
         .q-table thead, .q-field__label, .q-field__native, .q-item__label {{
             color: {theme.text_dim};
         }}
+        {_slate_overrides(theme)}
         """
     )

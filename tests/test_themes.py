@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from webui import themes
+from webui.themes import Theme
 
 
 def test_all_three_themes_registered() -> None:
@@ -66,3 +67,26 @@ def test_resolve_ignores_unknown_theme_name() -> None:
 
 def test_resolve_handles_settings_without_any_theme_key() -> None:
     assert themes.resolve(SimpleNamespace()) is themes.LIGHT
+
+
+def test_slate_overrides_only_emit_matching_mode() -> None:
+    """Light themes must not pick up dark: prefixed rules and vice versa."""
+    dark_css = themes._slate_overrides(themes.DARK)
+    assert "dark\\:bg-slate-700" in dark_css
+    assert ".bg-slate-100 " not in dark_css
+
+    light_css = themes._slate_overrides(themes.LIGHT)
+    assert ".bg-slate-100" in light_css
+    assert "dark\\:bg-slate-700" not in light_css
+
+
+def test_slate_overrides_use_theme_colours() -> None:
+    css = themes._slate_overrides(themes.OLED)
+    assert themes.OLED.page in css
+    assert themes.OLED.surface in css
+    assert themes.OLED.surface_alt in css
+
+
+def test_every_slate_entry_maps_to_a_real_theme_field() -> None:
+    for field in themes.SLATE_SURFACES.values():
+        assert field in Theme._fields, f"unknown Theme field: {field}"
