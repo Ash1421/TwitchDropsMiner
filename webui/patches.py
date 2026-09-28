@@ -7,8 +7,11 @@ fork keeps its diff against upstream minimal.
 
 from __future__ import annotations
 
+import os
+
 import settings as _settings
 import inventory as _inventory
+from constants import ClientType as _ClientType
 
 import webui.translations  # noqa
 from webui.badges import BadgeOwnership, registry as _badge_registry
@@ -17,6 +20,59 @@ _settings.default_settings["priority_link_override"] = False  # type: ignore[typ
 _settings.default_settings["priority_badge_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["owned_badge_games"] = set()  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["theme"] = "dark"  # type: ignore[typeddict-unknown-key]
+
+
+def _known_client_types() -> dict[str, object]:
+    return {
+        name: getattr(_ClientType, name)
+        for name in ("WEB", "MOBILE_WEB", "ANDROID_APP", "SMARTBOX")
+    }
+
+
+def _resolve_client_type(name: str) -> object:
+    """
+    Look up a client type by name, falling back to MOBILE_WEB.
+
+    MOBILE_WEB is the fallback because Twitch rejected the WEB and ANDROID_APP
+    client IDs with "invalid client", which made the hardcoded default in
+    ``Twitch.__init__`` unable to start a login at all.
+    """
+    types = _known_client_types()
+    return types.get(name.strip().upper(), _ClientType.MOBILE_WEB)
+
+
+def _apply_client_type() -> None:
+    """
+    Let TDM_CLIENT_TYPE override the client ID used for auth and GQL.
+
+    Upstream hardcodes ClientType.ANDROID_APP, so when Twitch retires a client
+    ID the app cannot log in and there is no supported way to change it. This
+    keeps the override in the fork instead of editing core.
+
+    ``twitch`` is imported lazily: it pulls in the tkinter GUI, which needs
+    Pillow, and the test suite runs without the GUI dependencies installed.
+    The patch is installed at most once even if this is called again.
+    """
+    if not os.environ.get("TDM_CLIENT_TYPE", "").strip():
+        return
+
+    import twitch as _twitch
+
+    original_init = _twitch.Twitch.__init__
+    if getattr(original_init, "_tdm_client_type_patched", False):
+        return
+
+    def patched_init(self: object, *args: object, **kwargs: object) -> None:
+        original_init(self, *args, **kwargs)
+        name = os.environ.get("TDM_CLIENT_TYPE", "").strip()
+        if name:
+            self._client_type = _resolve_client_type(name)  # type: ignore[attr-defined]
+
+    patched_init._tdm_client_type_patched = True  # type: ignore[attr-defined]
+    _twitch.Twitch.__init__ = patched_init  # type: ignore[method-assign]
+
+
+_apply_client_type()
 
 
 def _priority_link_override_get(self) -> bool:
