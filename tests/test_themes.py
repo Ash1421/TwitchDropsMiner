@@ -90,3 +90,63 @@ def test_slate_overrides_use_theme_colours() -> None:
 def test_every_slate_entry_maps_to_a_real_theme_field() -> None:
     for field in themes.SLATE_SURFACES.values():
         assert field in Theme._fields, f"unknown Theme field: {field}"
+
+
+def test_every_theme_defines_accent_and_on_accent() -> None:
+    """Buttons derive their label colour from primary, so both are required."""
+    for theme in themes.THEMES.values():
+        assert theme.accent
+        assert theme.on_accent
+
+
+def test_accent_and_on_accent_are_distinct() -> None:
+    """The bug this guards: identical accent/foreground hides button labels."""
+    for theme in themes.THEMES.values():
+        assert theme.accent.lower() != theme.on_accent.lower(), theme.name
+
+
+def test_accent_contrasts_with_its_foreground() -> None:
+    """WCAG-ish check so no theme renders light-on-light or dark-on-dark."""
+    for theme in themes.THEMES.values():
+        a = _relative_luminance(theme.accent)
+        b = _relative_luminance(theme.on_accent)
+        ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        assert ratio >= 4.5, f"{theme.name}: accent/on_accent ratio {ratio:.2f}"
+
+
+def test_body_text_contrasts_with_its_surface() -> None:
+    for theme in themes.THEMES.values():
+        a = _relative_luminance(theme.text)
+        b = _relative_luminance(theme.surface)
+        ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        assert ratio >= 7.0, f"{theme.name}: text/surface ratio {ratio:.2f}"
+
+
+def test_dim_text_contrasts_with_its_surface() -> None:
+    for theme in themes.THEMES.values():
+        a = _relative_luminance(theme.text_dim)
+        b = _relative_luminance(theme.surface)
+        ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        assert ratio >= 4.5, f"{theme.name}: text_dim/surface ratio {ratio:.2f}"
+
+
+def test_positive_and_negative_readable_on_every_surface() -> None:
+    for theme in themes.THEMES.values():
+        for field in ("positive", "negative"):
+            a = _relative_luminance(getattr(theme, field))
+            b = _relative_luminance(theme.surface)
+            ratio = (max(a, b) + 0.05) / (min(a, b) + 0.05)
+            assert ratio >= 3.0, f"{theme.name}: {field} ratio {ratio:.2f}"
+
+
+def test_text_is_not_pure_black_or_pure_white() -> None:
+    """Pure #000/#fff halates; the palettes use softened extremes."""
+    for theme in themes.THEMES.values():
+        assert theme.text.lower() not in ("#000", "#000000", "#fff", "#ffffff"), theme.name
+
+
+def _relative_luminance(color: str) -> float:
+    channels = [int(color[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    red, green, blue = linear
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue

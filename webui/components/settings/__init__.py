@@ -3,6 +3,7 @@ from .general_section import GeneralSection
 from .priority_section import PrioritySection
 from .exclude_section import ExcludeSection
 from .badge_section import BadgeSection
+from .webhook_section import WebhookSection
 
 __all__ = [
     "GameListSection",
@@ -10,4 +11,5 @@ __all__ = [
     "PrioritySection",
     "ExcludeSection",
     "BadgeSection",
+    "WebhookSection",
 ]

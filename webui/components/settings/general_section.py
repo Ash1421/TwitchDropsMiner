@@ -9,6 +9,7 @@ from translate import _
 from constants import PriorityMode, State
 from webui import themes
 from webui.html_utils import request_notification_permission_js
+from webui.notifications import DEFAULT_BOT_NAME
 
 if TYPE_CHECKING:
     from webui.manager import WebUIManager
@@ -28,13 +29,52 @@ class GeneralSection:
         return self._manager._twitch.settings
 
     def build(self) -> None:
+        """General card only; Advanced and Reload render in their own column."""
+        with ui.column().classes("gap-2 w-full"):
+            self._general_card()
+
+    def build_advanced(self) -> None:
+        with ui.column().classes("gap-2 w-full"):
+            self._advanced_card()
+            self._reload_card()
+
+    def _general_card(self) -> None:
         manager = self._manager
         settings = self._settings
-
-        with ui.column().classes("gap-2 grow shrink basis-60 min-w-0"):
+        with ui.column().classes("gap-2 w-full"):
             with ui.card().props("flat bordered").classes("w-full q-pa-sm"):
                 ui.label(_("gui", "settings", "general", "name")).classes(
                     "font-bold text-sm"
+                )
+
+                ui.label(
+                    _("webui", "settings", "general", "bot_name_hint")
+                ).classes("text-xxs text-grey-500")
+                ui.input(
+                    value=str(settings.bot_name or ""),
+                    placeholder=DEFAULT_BOT_NAME,
+                    on_change=lambda e: self._on_bot_name(e.value),
+                ).classes("w-full text-xs").props("dense maxlength=64 counter")
+
+                ui.label(
+                    _("webui", "settings", "general", "tab_title_hint")
+                ).classes("text-xxs text-grey-500")
+                with ui.row().classes("items-center gap-2 text-xs"):
+                    ui.label(
+                        _("webui", "settings", "general", "custom_tab_title")
+                    ).classes("flex-1")
+                    ui.switch(
+                        value=getattr(settings, "custom_tab_title", False),
+                        on_change=lambda e: self._on_custom_tab_title(e.value),
+                    ).bind_value_from(settings, "custom_tab_title")
+                ui.input(
+                    value=str(getattr(settings, "tab_title", "") or ""),
+                    placeholder=DEFAULT_BOT_NAME,
+                    on_change=lambda e: self._on_tab_title(e.value),
+                ).classes("w-full text-xs").props(
+                    "dense maxlength=128 counter"
+                ).bind_value_from(settings, "tab_title").bind_visibility_from(
+                    settings, "custom_tab_title"
                 )
 
                 with ui.row().classes("items-center gap-2 text-xs"):
@@ -94,6 +134,9 @@ class GeneralSection:
                     self, "_proxy_text"
                 )
 
+    def _advanced_card(self) -> None:
+        settings = self._settings
+        with ui.column().classes("gap-2 w-full"):
             with ui.card().props("flat bordered").classes("w-full q-pa-sm"):
                 ui.label(_("gui", "settings", "advanced", "name")).classes(
                     "font-bold text-sm"
@@ -138,23 +181,33 @@ class GeneralSection:
                         ),
                     ).bind_value_from(settings, "priority_link_override")
 
-                with ui.row().classes("items-center gap-2 text-xs"):
-                    ui.label(
-                        _("webui", "settings", "advanced", "priority_badge_override")
-                    ).classes("flex-1")
-                    ui.switch(
-                        value=settings.priority_badge_override,
-                        on_change=lambda e: GeneralSection._set_and_save(
-                            settings, "priority_badge_override", e.value
-                        ),
-                    ).bind_value_from(settings, "priority_badge_override")
-
+    def _reload_card(self) -> None:
+        manager = self._manager
+        with ui.column().classes("gap-2 w-full"):
             with ui.card().props("flat bordered").classes("w-full q-pa-sm"):
                 ui.label(_("gui", "settings", "reload_text")).classes("text-xs")
                 ui.button(
                     _("gui", "settings", "reload"),
                     on_click=manager._twitch.state_change(State.INVENTORY_FETCH),
                 ).props("dense").classes("text-xs w-full")
+
+    def _on_bot_name(self, value: str) -> None:
+        GeneralSection._set_and_save(
+            self._settings, "bot_name", (value or "").strip()[:64]
+        )
+        self._manager.apply_bot_name(value or "")
+
+    def _on_custom_tab_title(self, value: bool) -> None:
+        GeneralSection._set_and_save(
+            self._settings, "custom_tab_title", bool(value)
+        )
+        self._manager.apply_tab_title()
+
+    def _on_tab_title(self, value: str) -> None:
+        GeneralSection._set_and_save(
+            self._settings, "tab_title", (value or "").strip()
+        )
+        self._manager.apply_tab_title()
 
     def _on_language_change(self, language: str) -> None:
         try:

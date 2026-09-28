@@ -35,13 +35,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nicegui import ui, Client, app
 
-from constants import OUTPUT_FORMATTER, FILE_FORMATTER, State
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+
+from constants import CONFIG_PATH, OUTPUT_FORMATTER, FILE_FORMATTER, State
 from translate import _
 from .adapters import (
     TrayIconAdapter,
@@ -57,6 +61,12 @@ from .adapters import (
     HelpTabAdapter,
 )
 from .handlers import WebUIOutputHandler
+from .notifications import (
+    AVATAR_EXTENSIONS,
+    DEFAULT_BOT_NAME,
+    bot_display_name,
+    notifications,
+)
 from .html_utils import favicon_js, request_notification_permission_js
 from . import themes
 from .components import (
@@ -97,9 +107,15 @@ class WebUIManager:
         self._reload_requested = asyncio.Event()
         self._running = False
 
+        # Outbound notifications read their targets from the same settings
+        # object the UI writes to.
+        notifications.bind(twitch.settings)
+
         # Shared UI state
         self._current_icon: str = "pickaxe"
         self._status_text: str = "Initializing..."
+        self._bot_name_text: str = DEFAULT_BOT_NAME
+        self._title_text: str = DEFAULT_BOT_NAME
 
         # Adapters - mirrors of classes in gui.py
         self.tray = TrayIconAdapter(self)
@@ -135,9 +151,25 @@ class WebUIManager:
         per browser connection, building the full UI for that client."""
         app.add_static_files("/icons", str(Path(__file__).parent.parent / "icons"))
 
+        @app.get("/avatar")
+        def _avatar() -> FileResponse:
+            """Serve a locally stored avatar upload so tests can embed it and
+            a publicly reachable deployment can feed it to Discord."""
+            for ext, mime in AVATAR_EXTENSIONS.items():
+                path = CONFIG_PATH / f"avatar{ext}"
+                if path.exists():
+                    return FileResponse(path, media_type=mime)
+            raise HTTPException(status_code=404, detail="no avatar uploaded")
+
         @ui.page("/")
         def index(tab: str = "main"):
-            ui.page_title("Twitch Drops Miner")
+            # The header always shows the bot identity; the browser tab title
+            # follows the bot name unless a custom title is pinned. Header and
+            # title text are broadcast through their own attributes so late
+            # connections and multi-tab edits stay in sync.
+            self._bot_name_text = bot_display_name(self._twitch.settings)
+            self._title_text = self._effective_title()
+            ui.page_title(self._title_text)
             themes.apply(themes.resolve(self._twitch.settings))
 
             ui.query(".nicegui-content").classes("p-0")
@@ -225,6 +257,39 @@ class WebUIManager:
         for client in app.clients():
             with client:
                 ui.run_javascript("location.reload()")
+
+    def apply_bot_name(self, name: str) -> None:
+        """Reflect a bot-name edit in the header and (unless a custom tab title
+        is pinned) in every open tab's title."""
+        self._refresh_title()
+        self._refresh_header()
+
+    def apply_tab_title(self) -> None:
+        """Push a custom-tab-title toggle or text edit to every open tab."""
+        self._refresh_title()
+
+    def _effective_title(self) -> str:
+        """The browser tab title: the pinned custom title, or the bot name."""
+        settings = self._twitch.settings
+        if getattr(settings, "custom_tab_title", False):
+            custom = (getattr(settings, "tab_title", "") or "").strip()
+            if custom:
+                return custom[:128]
+        return bot_display_name(self._twitch.settings)
+
+    def _refresh_title(self) -> None:
+        """Recompute and broadcast the tab title to every open tab."""
+        self._title_text = self._effective_title()
+        title = self._title_text.replace("'", "\\'")
+        for client in app.clients():
+            with client:
+                with suppress(Exception):
+                    ui.page_title(self._title_text)
+                ui.run_javascript(f"document.title = '{title}'")
+
+    def _refresh_header(self) -> None:
+        """Recompute the header label, which always shows the bot identity."""
+        self._bot_name_text = bot_display_name(self._twitch.settings)
 
     @property
     def running(self) -> bool:
@@ -323,6 +388,15 @@ class WebUIManager:
     def set_games(self, games: set[Game]) -> None:
         """Set available games for settings"""
         self.settings_panel.set_games(games)
+
+    def set_campaigns(self, campaigns: set) -> None:
+        """
+        Publish known campaigns so the Badges list can offer per-campaign choices.
+
+        Upstream's ``gui.set_games`` call only forwards game objects, but badge
+        ownership is tracked per campaign, so the campaigns are passed alongside.
+        """
+        self.settings_panel.set_campaigns(campaigns)
 
     def apply_theme(self, dark: bool) -> None:
         """Apply theme (no-op for web UI)"""

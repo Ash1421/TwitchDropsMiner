@@ -21,7 +21,7 @@ class PrioritySection(GameListSection):
         with (
             ui.card()
             .props("flat bordered")
-            .classes("q-pa-sm flex flex-col grow shrink basis-60 min-w-0")
+            .classes("q-pa-sm flex flex-col grow shrink basis-60 w-full min-w-0")
         ):
             ui.label(_("gui", "settings", "priority")).classes("font-bold text-sm")
             self._input_content()
@@ -40,7 +40,7 @@ class PrioritySection(GameListSection):
                     ui.button("⏬", on_click=lambda: self._move("bottom")).props(
                         "flat"
                     ).classes("text-xl p-0 min-h-0")
-                    ui.button("❌", on_click=self._on_delete).props("flat").classes(
+                    ui.button("✕", on_click=self._on_delete).props("flat").classes(
                         "text-red-500 text-xl p-0 min-h-0"
                     )
 

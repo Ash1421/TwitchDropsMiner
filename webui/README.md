@@ -81,6 +81,26 @@ The WebUI provides all the functionality of the traditional GUI:
 - **Settings Tab**: Configure games, priorities, and WebUI settings
 - **Help Tab**: Application information and links
 
+### Notifications
+
+The Settings → Notifications card wires one-way delivery of miner events (drops claimed, campaigns completed, channel switches, fatal errors) to Discord, Telegram, or both.
+
+Display identity — set once in Settings, used everywhere:
+
+- **Bot name**: Named "Twitch Drops Miner" by default. Overrides the browser tab title, the Discord webhook sender, and the Telegram message prefix. Max 64 characters.
+- **Avatar**: Accepts a hosted URL *or* an uploaded image. Supported formats are PNG, JPG, GIF, and WebP, up to 5 MB. An upload is stored at `config/avatar.<ext>`, served from this app's `/avatar` endpoint, and used as `avatar_url`.
+  - **Important**: Discord fetches the avatar server-side and re-caches it (changes can take minutes). Localhost won't work — the `/avatar` URL is only reachable by Discord when this WebUI is exposed on a public host or via port forwarding. Otherwise use a hosted image URL, or leave the field empty to keep the avatar configured on the webhook itself.
+  - The fork ships the official pickaxe icon at `icons/pickaxe.png`; it is the recommended avatar to set on the webhook.
+- **Embed color**: Tint of the Discord embed. Available as hex (`#rrggbb`) and RGB (`rgb(r, g, b)`) with a color picker. Default is the signature purple `#7d46ff`.
+- Every identity field has a **reset-to-default** button.
+
+Targets:
+
+- **Discord**: An incoming webhook URL. Secret-like — once saved, the field shows a hint instead of the value; leave it blank to keep what is stored.
+- **Telegram**: A bot token from [@BotFather](https://t.me/BotFather) and a chat ID (see the in-card guide). Text messages render in HTML with a `*[name]*` prefix.
+
+Event toggles select which events are delivered. Delivery failures are reported in a notification instead of taking the app down.
+
 ## Comparison with tkinter GUI
 
 | Feature | WebUI | tkinter GUI |

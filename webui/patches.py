@@ -15,11 +15,36 @@ from constants import ClientType as _ClientType
 
 import webui.translations  # noqa
 from webui.badges import BadgeOwnership, registry as _badge_registry
+from webui.notifications import DEFAULT_AVATAR_URL
 
 _settings.default_settings["priority_link_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["priority_badge_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["owned_badge_games"] = set()  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["owned_badge_campaigns"] = set()  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["theme"] = "dark"  # type: ignore[typeddict-unknown-key]
+
+# The browser tab title normally follows the bot name; the optional custom
+# value decouples the tab name from the webhook identity.
+_settings.default_settings["custom_tab_title"] = False  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["tab_title"] = ""  # type: ignore[typeddict-unknown-key]
+
+# Display identity: the browser tab/name shown on outgoing notifications. An
+# empty bot name falls back to the packaged default; the embed tint starts as
+# the app's signature purple so messages match the rest of the UI out of the
+# box. The avatar default is the official pickaxe icon, hosted on this fork's
+# GitHub blob so Discord can fetch it once the branch is public.
+_settings.default_settings["bot_name"] = ""  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["webhook_avatar"] = DEFAULT_AVATAR_URL  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["embed_color"] = "#7d46ff"  # type: ignore[typeddict-unknown-key]
+
+# Notification settings. Secrets default to empty so nothing is sent until the
+# user supplies a target; the per-event toggles default to on so adding a
+# webhook starts delivering without a second trip through the UI.
+_settings.default_settings["discord_webhook_url"] = ""  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["telegram_bot_token"] = ""  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["telegram_chat_id"] = ""  # type: ignore[typeddict-unknown-key]
+for _event in ("drop_claimed", "campaign_complete", "channel_switch", "fatal_error"):
+    _settings.default_settings[f"notify_{_event}"] = True  # type: ignore[typeddict-unknown-key]
 
 
 def _known_client_types() -> dict[str, object]:
@@ -131,11 +156,17 @@ def _badge_ownership_get(self) -> BadgeOwnership:
 
     Non-badge campaigns report NOT_APPLICABLE. For badge campaigns this layers
     the free signals (previously awarded benefit edges, then the user-declared
-    "Badges I own" list) and reports UNKNOWN when neither can confirm it, so the
-    UI can prompt instead of quietly assuming "not owned".
+    "Badge campaigns I own" list) and reports UNKNOWN when neither can confirm
+    it, so the UI can prompt instead of quietly assuming "not owned".
+
+    Manual entries are matched by campaign ID. The legacy game-keyed list is
+    still consulted so configurations written before the switch keep working.
     """
+    settings = self._twitch.settings
     return _badge_registry.owns_campaign(
-        self, getattr(self._twitch.settings, "owned_badge_games", None)
+        self,
+        manual_campaign_ids=getattr(settings, "owned_badge_campaigns", None),
+        manual_games=getattr(settings, "owned_badge_games", None),
     )
 
 
@@ -185,3 +216,42 @@ setattr(
     "eligible",
     property(_eligible_get),
 )
+
+
+# ---------------------------------------------------------------------------
+# Outbound notification hooks
+#
+# Wrapping rather than editing core keeps these changes WebUI-only and avoids
+# merge conflicts with upstream.
+# ---------------------------------------------------------------------------
+
+# Campaign completion: the only place a campaign learns it just lost its last
+# drop is the claim that consumed it, so compare the count before and after.
+# ``DropsCampaign`` exposes ``finished``/``claimed_drops``; the parent campaign
+# link is reached through the drop's ``campaign`` attribute.
+_original_drop_claim = _inventory.TimedDrop.claim
+
+
+async def _timed_drop_claim(self) -> bool:  # type: ignore[no-untyped-def]
+    campaign = getattr(self, "campaign", None)
+    before_finished = bool(getattr(campaign, "finished", False)) if campaign else False
+    claimed = await _original_drop_claim(self)
+    if claimed and campaign is not None and not before_finished:
+        if getattr(campaign, "finished", False):
+            try:
+                from .notifications import notifications
+
+                notifications.send(
+                    "campaign_complete",
+                    "Campaign completed",
+                    f"{getattr(campaign, 'name', 'Unknown campaign')} "
+                    "is now fully claimed.",
+                )
+            except Exception:
+                # A notification failure must never break the claim path.
+                pass
+    return claimed
+
+
+_inventory.TimedDrop.claim = _timed_drop_claim  # type: ignore[method-assign]
+

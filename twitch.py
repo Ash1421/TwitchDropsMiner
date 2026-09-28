@@ -647,6 +647,12 @@ class Twitch:
                 await self.websocket.start()
                 await self.fetch_inventory()
                 self.gui.set_games(set(campaign.game for campaign in self.inventory))
+                # The WebUI badge list is keyed by campaign (a Twitch benefit can
+                # cover several games), so publish campaigns alongside games.
+                # Guarded with hasattr because the Tkinter GUI has no such hook.
+                set_campaigns = getattr(self.gui, "set_campaigns", None)
+                if set_campaigns is not None:
+                    set_campaigns(set(self.inventory))
                 # Save state on every inventory fetch
                 self.save()
                 self.change_state(State.GAMES_UPDATE)

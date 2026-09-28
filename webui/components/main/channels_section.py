@@ -116,11 +116,19 @@ class ChannelsSection:
                     "channel": name,
                     "status": status,
                     "game": str(channel.game or ""),
-                    "drops": "✅" if channel.drops_enabled else "❌",
+                    "drops": (
+                        '<span class="tdm-tick-yes">✔</span>'
+                        if channel.drops_enabled
+                        else '<span class="tdm-tick-no">✘</span>'
+                    ),
                     "viewers": (
                         str(channel.viewers) if channel.viewers is not None else ""
                     ),
-                    "acl_base": "✅" if channel.acl_based else "❌",
+                    "acl_base": (
+                        '<span class="tdm-tick-yes">✔</span>'
+                        if channel.acl_based
+                        else '<span class="tdm-tick-no">✘</span>'
+                    ),
                 }
             )
 

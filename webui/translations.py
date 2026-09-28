@@ -28,13 +28,65 @@ default_webui_translation: dict[str, Any] = {
         "settings": {
             "advanced": {
                 "priority_link_override": "Mine unlinked games from the Priority List: ",
-                "priority_badge_override": "Mine badge/emote drops for Priority List games: ",
             },
             "badges": {
-                "name": "Badges I own",
-                "hint": "For badges granted outside Twitch Drops (events, purchases, "
-                "subscription renewals). Leave empty unless badge campaigns are "
-                "being skipped.",
+                "name": "Badge campaigns I own",
+                "hint": "Badge and emote campaigns to treat as already paid for, "
+                "for badges granted outside Twitch Drops (events, purchases, "
+                "subscription renewals). Each row shows what Twitch currently "
+                "reports; adding a campaign overrides that.",
+                "game_name": "Badge campaign: ",
+                "priority_badge_override": "Also treat Priority List badge campaigns "
+                "as mine: ",
+                "state_owned": "confirmed owned",
+                "state_partial": "partially owned",
+                "state_unknown": "not confirmed",
+                "state_detail": "Twitch says: {state}",
+            },
+            "webhooks": {
+                "name": "Notifications",
+                "hint": "Discord uses an incoming webhook and is one-way. "
+                "Telegram can reply to messages once the bot is connected.",
+                "bot_name": "Webhook / bot name:",
+                "avatar_url": "Avatar URL:",
+                "avatar_upload": "Upload avatar image",
+                "avatar_rejected": "Unsupported image type",
+                "avatar_hint": "PNG/JPG/GIF/WebP, up to 5 MB. An uploaded file is "
+                "stored on this device and served from this app's `/avatar`, so "
+                "Discord can fetch it only if this address is reachable from the "
+                "internet (public host or port-forward). Leave empty to keep the "
+                "icon configured on the webhook itself — the pickaxe.",
+                "avatar_uploaded": "Avatar uploaded — served from {url}",
+                "embed_color": "Embed color:",
+                "color_hex": "Hex",
+                "color_rgb": "RGB",
+                "reset": "Reset to default",
+                "secret_configured": "Already set — leave blank to keep the stored value",
+                "discord_url": "Discord webhook URL:",
+                "telegram_token": "Telegram bot token:",
+                "telegram_chat": "Telegram chat ID:",
+                "telegram_guide": "How to create a Telegram bot",
+                "telegram_guide_md": (
+                    "1. Send `/newbot` to [@BotFather](https://t.me/BotFather) "
+                    "on Telegram and follow the prompts.\n"
+                    "2. Copy the token it gives you (`123456:ABC-DEF...`) into the "
+                    "field above.\n"
+                    "3. To find your chat ID, message [@userinfobot](https://t.me/userinfobot) "
+                    "and read the `id` from its reply, or call "
+                    "`https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser.\n\n"
+                    "The official guide lives here: "
+                    "[Bots: An introduction for developers](https://core.telegram.org/bots)."
+                ),
+                "events": "Send a message when:",
+                "event_drop_claimed": "a drop is claimed",
+                "event_campaign_complete": "a campaign is completed",
+                "event_channel_switch": "the watched channel changes",
+                "event_fatal_error": "the miner hits a fatal error",
+                "test_hint": "Secrets are stored in config/settings.json, which is "
+                "gitignored. Fields show the stored value behind the eye toggle; "
+                "clearing a secret field removes it.",
+                "test_discord": "Test Discord",
+                "test_telegram": "Test Telegram",
             },
             "general": {
                 "language": "Language: ",
@@ -43,10 +95,16 @@ default_webui_translation: dict[str, Any] = {
                 "theme_light": "Light",
                 "theme_dark": "Dark",
                 "theme_oled": "OLED",
+                "bot_name": "Bot name:",
+                "bot_name_hint": "Shown in the browser tab and sent with outgoing "
+                "notifications. Leave empty for the default.",
+                "custom_tab_title": "Use a custom tab title:",
+                "tab_title_hint": "Tab title in the browser. Leave the switch off "
+                "to keep it following the bot name.",
             },
         },
         "channels": {
-            "headings": {"drops": "DROPS Enabled", "channel_only": "CHANNEL ONLY"}
+            "headings": {"drops": "DROPS Enabled", "channel_only": "Specific"}
         },
         "help": {
             "about": "About",

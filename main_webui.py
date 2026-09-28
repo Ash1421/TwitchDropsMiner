@@ -51,6 +51,29 @@ if __name__ == "__main__":
     from twitch import Twitch
     from settings import Settings
     from version import __version__
+    from webui.notifications import notifications
+
+    def notify_fatal_error(exc: BaseException, trace: str) -> None:
+        """
+        Report a crash without shipping the whole traceback off-box.
+
+        The full traceback stays in the local log; only the exception line and
+        the deepest application frame travel, which is enough to identify the
+        failure without pushing file paths or environment details to a chat
+        service.
+        """
+        frames = [
+            line.strip()
+            for line in trace.splitlines()
+            if line.strip().startswith("File ")
+        ]
+        location = frames[-1] if frames else "unknown location"
+        body = f"{type(exc).__name__}: {exc}\nAt: {location}"
+        try:
+            notifications.send("fatal_error", "Miner stopped with a fatal error", body)
+        except Exception:
+            # Never let the crash reporter mask the original crash.
+            pass
     from exceptions import CaptchaRequired
     from utils import lock_file
     from constants import (
@@ -202,11 +225,13 @@ if __name__ == "__main__":
             exit_status = 1
             client.prevent_close()
             client.print(_("error", "captcha"))
-        except Exception:
+        except Exception as exc:
             exit_status = 1
             client.prevent_close()
             client.print("Fatal error encountered:\n")
-            client.print(traceback.format_exc())
+            trace = traceback.format_exc()
+            client.print(trace)
+            notify_fatal_error(exc, trace)
         finally:
             if sys.platform == "linux":
                 loop.remove_signal_handler(signal.SIGINT)

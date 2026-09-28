@@ -62,6 +62,17 @@ def test_patch_registers_new_settings_defaults() -> None:
     assert settings.default_settings["priority_badge_override"] is False
     assert settings.default_settings["owned_badge_games"] == set()
     assert settings.default_settings["theme"] == "dark"
+    # Tab title follows the bot name unless a custom one is pinned.
+    assert settings.default_settings["custom_tab_title"] is False
+    assert settings.default_settings["tab_title"] == ""
+    # Notification identity defaults: empty name falls back to the packaged one,
+    # the avatar defaults to the official pickaxe icon, and the embed tint
+    # starts as the signature purple.
+    assert settings.default_settings["bot_name"] == ""
+    assert settings.default_settings["webhook_avatar"].endswith(
+        "/icons/pickaxe.png"
+    )
+    assert settings.default_settings["embed_color"] == "#7d46ff"
 
 
 def test_patches_imported_before_settings_construction() -> None:

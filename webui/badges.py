@@ -87,17 +87,24 @@ class BadgeRegistry:
         return frozenset(self._claimed_benefit_ids)
 
     def owns_campaign(
-        self, campaign: "DropsCampaign", manual_games: set[str] | None = None
+        self,
+        campaign: "DropsCampaign",
+        manual_campaign_ids: set[str] | None = None,
+        manual_games: set[str] | None = None,
     ) -> BadgeOwnership:
         """
         Best-effort ownership verdict for *campaign*.
 
         The manual list wins outright, because the user asserting they own a
-        badge is more authoritative than any lookup we can perform.
+        badge is more authoritative than any lookup we can perform. Campaigns
+        are matched by ID; *manual_games* is accepted for the older game-keyed
+        setting so existing entries keep working.
         """
         benefits = badge_benefits(campaign)
         if not benefits:
             return BadgeOwnership.NOT_APPLICABLE
+        if manual_campaign_ids and campaign.id in manual_campaign_ids:
+            return BadgeOwnership.OWNED
         if manual_games and campaign.game.name in manual_games:
             return BadgeOwnership.OWNED
         owned = [b for b in benefits if b.id in self._claimed_benefit_ids]
