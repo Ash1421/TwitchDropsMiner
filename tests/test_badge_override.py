@@ -60,6 +60,30 @@ def test_patch_registers_new_settings_defaults() -> None:
 
     assert settings.default_settings["priority_link_override"] is False
     assert settings.default_settings["priority_badge_override"] is False
+    assert settings.default_settings["owned_badge_games"] == set()
+    assert settings.default_settings["theme"] == "dark"
+
+
+def test_patches_imported_before_settings_construction() -> None:
+    """
+    Guard the import order that every fork-injected setting depends on.
+
+    ``Settings.__setattr__`` raises TypeError for any key absent from the loaded
+    settings dict, and that dict is seeded from ``default_settings`` at
+    construction time. So ``webui.patches`` must be imported before
+    ``Settings(...)`` runs, or every new setting becomes unsettable at runtime.
+    """
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parent.parent / "main_webui.py").read_text(
+        encoding="utf-8"
+    )
+    patch_at = source.index("import webui.patches")
+    settings_at = source.index("Settings(args)")
+    assert patch_at < settings_at, (
+        "webui.patches must be imported before Settings() is constructed, "
+        "otherwise injected settings keys become unsettable"
+    )
 
 
 def test_badge_campaign_blocked_by_default() -> None:

@@ -36,7 +36,14 @@ default_webui_translation: dict[str, Any] = {
                 "subscription renewals). Leave empty unless badge campaigns are "
                 "being skipped.",
             },
-            "general": {"language": "Language: ", "invalid_proxy": "Invalid proxy URL"},
+            "general": {
+                "language": "Language: ",
+                "invalid_proxy": "Invalid proxy URL",
+                "theme": "Theme:",
+                "theme_light": "Light",
+                "theme_dark": "Dark",
+                "theme_oled": "OLED",
+            },
         },
         "channels": {
             "headings": {"drops": "DROPS Enabled", "channel_only": "CHANNEL ONLY"}

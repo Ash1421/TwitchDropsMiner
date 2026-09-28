@@ -16,6 +16,7 @@ from webui.badges import BadgeOwnership, registry as _badge_registry
 _settings.default_settings["priority_link_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["priority_badge_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["owned_badge_games"] = set()  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["theme"] = "dark"  # type: ignore[typeddict-unknown-key]
 
 
 def _priority_link_override_get(self) -> bool:
