@@ -11,9 +11,11 @@ import settings as _settings
 import inventory as _inventory
 
 import webui.translations  # noqa
+from webui.badges import BadgeOwnership, registry as _badge_registry
 
 _settings.default_settings["priority_link_override"] = False  # type: ignore[typeddict-unknown-key]
 _settings.default_settings["priority_badge_override"] = False  # type: ignore[typeddict-unknown-key]
+_settings.default_settings["owned_badge_games"] = set()  # type: ignore[typeddict-unknown-key]
 
 
 def _priority_link_override_get(self) -> bool:
@@ -64,6 +66,45 @@ setattr(
     "priority_badge_override",
     property(_priority_badge_override_get),
 )
+
+
+def _badge_ownership_get(self) -> BadgeOwnership:
+    """
+    What we know about whether the account owns this campaign's badge/emote.
+
+    Non-badge campaigns report NOT_APPLICABLE. For badge campaigns this layers
+    the free signals (previously awarded benefit edges, then the user-declared
+    "Badges I own" list) and reports UNKNOWN when neither can confirm it, so the
+    UI can prompt instead of quietly assuming "not owned".
+    """
+    return _badge_registry.owns_campaign(
+        self, getattr(self._twitch.settings, "owned_badge_games", None)
+    )
+
+
+setattr(
+    _inventory.DropsCampaign,
+    "badge_ownership",
+    property(_badge_ownership_get),
+)
+
+
+_original_init = _inventory.DropsCampaign.__dict__["__init__"]
+
+
+def _campaign_init(self, twitch, data, claimed_benefits):
+    """
+    Capture the claimed-benefit map, then build the campaign as upstream does.
+
+    ``Twitch.fetch_inventory`` builds ``claimed_benefits`` as a local variable and
+    only passes it to campaign constructors, so this wrapper is the only place a
+    WebUI-side module can observe it without editing core.
+    """
+    _badge_registry.observe_claimed_benefits(claimed_benefits)
+    _original_init(self, twitch, data, claimed_benefits)
+
+
+setattr(_inventory.DropsCampaign, "__init__", _campaign_init)
 
 
 def _eligible_get(self) -> bool:

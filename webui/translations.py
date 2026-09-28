@@ -30,6 +30,12 @@ default_webui_translation: dict[str, Any] = {
                 "priority_link_override": "Mine unlinked games from the Priority List: ",
                 "priority_badge_override": "Mine badge/emote drops for Priority List games: ",
             },
+            "badges": {
+                "name": "Badges I own",
+                "hint": "For badges granted outside Twitch Drops (events, purchases, "
+                "subscription renewals). Leave empty unless badge campaigns are "
+                "being skipped.",
+            },
             "general": {"language": "Language: ", "invalid_proxy": "Invalid proxy URL"},
         },
         "channels": {
