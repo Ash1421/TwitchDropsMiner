@@ -116,11 +116,11 @@ class ChannelsSection:
                     "channel": name,
                     "status": status,
                     "game": str(channel.game or ""),
-                    "drops": "✔" if channel.drops_enabled else "❌",
+                    "drops": "✅" if channel.drops_enabled else "❌",
                     "viewers": (
                         str(channel.viewers) if channel.viewers is not None else ""
                     ),
-                    "acl_base": "✔" if channel.acl_based else "❌",
+                    "acl_base": "✅" if channel.acl_based else "❌",
                 }
             )
 
@@ -148,7 +148,7 @@ class ChannelsSection:
             },
             {
                 "name": "drops",
-                "label": "🎁",
+                "label": _("webui", "channels", "headings", "drops"),
                 "field": "drops",
                 "align": "center",
             },
@@ -161,7 +161,7 @@ class ChannelsSection:
             },
             {
                 "name": "acl_base",
-                "label": "📋",
+                "label": _("webui", "channels", "headings", "channel_only"),
                 "field": "acl_base",
                 "align": "center",
             },

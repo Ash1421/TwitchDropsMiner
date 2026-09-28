@@ -31,6 +31,9 @@ default_webui_translation: dict[str, Any] = {
             },
             "general": {"language": "Language: ", "invalid_proxy": "Invalid proxy URL"},
         },
+        "channels": {
+            "headings": {"drops": "DROPS Enabled", "channel_only": "CHANNEL ONLY"}
+        },
         "help": {
             "about": "About",
             "created_by": "Application created by:",
