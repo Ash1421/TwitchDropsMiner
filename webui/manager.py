@@ -37,6 +37,7 @@ import asyncio
 import logging
 from contextlib import suppress
 from datetime import datetime
+from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,7 +46,7 @@ from nicegui import ui, Client, app
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
-from constants import CONFIG_PATH, OUTPUT_FORMATTER, FILE_FORMATTER, State
+from constants import CONFIG_PATH, COOKIES_PATH, OUTPUT_FORMATTER, FILE_FORMATTER, State
 from translate import _
 from .adapters import (
     TrayIconAdapter,
@@ -116,6 +117,10 @@ class WebUIManager:
         self._status_text: str = "Initializing..."
         self._bot_name_text: str = DEFAULT_BOT_NAME
         self._title_text: str = DEFAULT_BOT_NAME
+        # Set by main_webui when the backend exits with an error (captcha or a
+        # fatal exception); overrides the usually-finite status text so
+        # integrations report the real state instead of a stale one.
+        self._terminated_reason: str | None = None
 
         # Adapters - mirrors of classes in gui.py
         self.tray = TrayIconAdapter(self)
@@ -136,6 +141,11 @@ class WebUIManager:
         self.inventory_panel: BasePanel = InventoryPanel(self)
         self.settings_panel: BasePanel = SettingsPanel(self)
         self.help_panel: BasePanel = HelpPanel(self)
+
+        # Two-way Telegram integration (long-poll command bot).
+        from .telegram_bot import TelegramCommandPoller
+
+        self.telegram: TelegramCommandPoller = TelegramCommandPoller(self)
 
         self._setup_ui()
 
@@ -322,7 +332,22 @@ class WebUIManager:
             print(FILE_FORMATTER.format(record))
 
     def close(self, *args) -> int:
-        """Signal the main loop to shut down (mirrors GUIManager.close)."""
+        """Signal the main loop to shut down (mirrors GUIManager.close).
+
+        Runs on SIGTERM/SIGINT - i.e. ``docker stop`` or a watchtower/autoheal
+        restart - so this is the one reliable place to tell the user the
+        container is going down. Best-effort: a webhook must never block the
+        shutdown.
+        """
+        try:
+            notifications.send(
+                "shutdown",
+                "Miner is stopping",
+                "The container is shutting down or being restarted "
+                "(watchtower/autoheal update, or a `docker stop`).",
+            )
+        except Exception:
+            pass
         self._close_requested.set()
         self._twitch.close()
         return 0
@@ -344,6 +369,7 @@ class WebUIManager:
 
     def start(self):
         self._running = True
+        self.telegram.start()
 
     async def coro_unless_closed(self, coro):
         """Run coro, but raise ExitRequest or ReloadRequest if those are signalled first."""
@@ -372,6 +398,13 @@ class WebUIManager:
         """Clear the current drop display"""
         self.main_panel.clear_drop()
 
+    def request_reload(self) -> bool:
+        """Soft reload - same action as Settings -> Reload button."""
+        if self._twitch._state is State.EXIT:
+            return False
+        self._twitch.state_change(State.INVENTORY_FETCH)()
+        return True
+
     def restart(self) -> None:
         self._reload_requested.set()
         self._twitch.state_change(State.INVENTORY_FETCH)()
@@ -380,6 +413,57 @@ class WebUIManager:
         self.channels.clear()
         await self._invalidate_token()
         self.restart()
+
+    async def import_auth_token(self, token: str) -> tuple[bool, str]:
+        """Restore a Twitch session from an ``auth-token`` cookie value.
+
+        The token is validated against id.twitch.tv/oauth2/validate *before*
+        the persisted jar is touched, so a token minted for a different client
+        can never put the app into the login crash loop (the cookie-client
+        mismatch branch in ``twitch._validate`` deletes the jar and falls into
+        the retired device flow). On success the jar is rewritten with just the
+        auth-token cookie and the backend restarts, which re-runs ``_validate``
+        in ``get_auth`` and completes the login.
+
+        Returns (ok, message).
+        """
+        token = (token or "").strip()
+        if not token:
+            return False, _("webui", "login", "restore_empty")
+        client = self._twitch._client_type
+        async with self._twitch.request(
+            "GET",
+            "https://id.twitch.tv/oauth2/validate",
+            headers={"Authorization": f"OAuth {token}"},
+        ) as response:
+            if response.status != 200:
+                return False, _("webui", "login", "restore_invalid")
+            validate_response = await response.json()
+        if validate_response.get("client_id") != client.CLIENT_ID:
+            return False, _("webui", "login", "restore_client").format(
+                actual=validate_response.get("client_id")
+            )
+        session = await self._twitch.get_session()
+        jar = session.cookie_jar
+        jar.clear()
+        auth_cookie = SimpleCookie()
+        auth_cookie["auth-token"] = token
+        auth_cookie["auth-token"]["domain"] = client.CLIENT_URL.host
+        auth_cookie["auth-token"]["path"] = "/"
+        jar.update_cookies(auth_cookie, client.CLIENT_URL)
+        jar.save(COOKIES_PATH)
+        self.print(_("webui", "login", "restore_ok"))
+        self.restart()
+        return True, _("webui", "login", "restore_ok")
+
+    async def import_auth_token_file(self, data: bytes) -> tuple[bool, str]:
+        """Restore a Twitch session from an exported cookie file."""
+        from .cookie_import import extract_auth_token
+
+        token = extract_auth_token(data)
+        if token is None:
+            return False, _("webui", "login", "restore_no_token")
+        return await self.import_auth_token(token)
 
     def display_drop(self, drop, *, countdown: bool = True, subone: bool = False):
         """Display current drop information"""
@@ -414,3 +498,83 @@ class WebUIManager:
     def update_status(self, text: str) -> None:
         """Update status text — bindings propagate the new value to all connected clients."""
         self._status_text = text
+
+    def mark_terminated(self, reason: str) -> None:
+        """Record that the backend stopped abnormally (fatal error, captcha)."""
+        self._terminated_reason = reason or "Terminated"
+
+    def status_summary(self) -> dict[str, object]:
+        """A plain snapshot for integrations (the Telegram /status command)."""
+        twitch = self._twitch
+        auth = getattr(twitch, "_auth_state", None)
+        logged_in = bool(
+            auth is not None
+            and getattr(auth, "_logged_in", None) is not None
+            and auth._logged_in.is_set()
+        )
+        watching_task = getattr(twitch, "_watching_task", None)
+        return {
+            "logged_in": logged_in,
+            "user_id": getattr(auth, "user_id", None) if logged_in else None,
+            "status": self._terminated_reason or self._status_text,
+            "terminated": self._terminated_reason is not None,
+            "channels": len(getattr(twitch, "channels", None) or ()),
+            "watching": bool(
+                self._terminated_reason is None
+                and watching_task is not None
+                and not watching_task.done()
+            ),
+        }
+
+    async def watch_channel(self, login: str) -> tuple[bool, str]:
+        """Force the miner toward a tracked stream (the Telegram /watch command).
+
+        Returns (True, "") after selecting the channel and requesting a channel
+        switch, or (False, reason) when the stream is unknown or the backend is
+        not running (e.g. after a fatal error).
+        """
+        login = (login or "").strip().lower()
+        if not login:
+            return False, "No stream given."
+        if self._terminated_reason is not None:
+            return (
+                False,
+                f"The miner is not running ({self._terminated_reason}).",
+            )
+        twitch = self._twitch
+        channel = next(
+            (
+                channel
+                for channel in (getattr(twitch, "channels", None) or {}).values()
+                if getattr(channel, "name", "").lower() == login
+            ),
+            None,
+        )
+        if channel is None:
+            return (
+                False,
+                f"Unknown stream '{login}' - add its game in the WebUI game list first.",
+            )
+        self.main_panel.select_channel(channel)
+        twitch.state_change(State.CHANNEL_SWITCH)()
+        return True, ""
+
+    def streams_summary(self) -> list[dict[str, object]]:
+        """Snapshot of every tracked streamer for the Telegram /streams command."""
+        channels = (getattr(self._twitch, "channels", None) or {}).values()
+        rows: list[dict[str, object]] = []
+        for channel in channels:
+            game = getattr(channel, "game", None)
+            rows.append(
+                {
+                    "login": getattr(channel, "_login", "")
+                    or getattr(channel, "name", ""),
+                    "display": getattr(channel, "name", ""),
+                    "online": bool(getattr(channel, "online", False)),
+                    "viewers": getattr(channel, "viewers", None),
+                    "game": game.name if game is not None else None,
+                    "drops": bool(getattr(channel, "drops_enabled", False)),
+                }
+            )
+        rows.sort(key=lambda row: (not row["online"], not row["drops"], str(row["display"]).lower()))
+        return rows

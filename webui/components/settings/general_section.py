@@ -48,15 +48,6 @@ class GeneralSection:
                 )
 
                 ui.label(
-                    _("webui", "settings", "general", "bot_name_hint")
-                ).classes("text-xxs text-grey-500")
-                ui.input(
-                    value=str(settings.bot_name or ""),
-                    placeholder=DEFAULT_BOT_NAME,
-                    on_change=lambda e: self._on_bot_name(e.value),
-                ).classes("w-full text-xs").props("dense maxlength=64 counter")
-
-                ui.label(
                     _("webui", "settings", "general", "tab_title_hint")
                 ).classes("text-xxs text-grey-500")
                 with ui.row().classes("items-center gap-2 text-xs"):
@@ -188,14 +179,8 @@ class GeneralSection:
                 ui.label(_("gui", "settings", "reload_text")).classes("text-xs")
                 ui.button(
                     _("gui", "settings", "reload"),
-                    on_click=manager._twitch.state_change(State.INVENTORY_FETCH),
+                    on_click=manager.request_reload,
                 ).props("dense").classes("text-xs w-full")
-
-    def _on_bot_name(self, value: str) -> None:
-        GeneralSection._set_and_save(
-            self._settings, "bot_name", (value or "").strip()[:64]
-        )
-        self._manager.apply_bot_name(value or "")
 
     def _on_custom_tab_title(self, value: bool) -> None:
         GeneralSection._set_and_save(

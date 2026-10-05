@@ -215,6 +215,18 @@ if __name__ == "__main__":
         client = Twitch(settings)
         twitch_client = client
 
+        # Tell the configured chat/webhook that the container came back up
+        # (e.g. after a watchtower update restart).
+        try:
+            await asyncio.to_thread(
+                notifications.send,
+                "startup",
+                "Miner is online",
+                "The container started up successfully.",
+            )
+        except Exception:
+            pass
+
         loop = asyncio.get_running_loop()
         if sys.platform == "linux":
             loop.add_signal_handler(signal.SIGINT, lambda *_: client.gui.close())
@@ -224,10 +236,12 @@ if __name__ == "__main__":
         except CaptchaRequired:
             exit_status = 1
             client.prevent_close()
+            client.gui.mark_terminated(_("error", "captcha"))
             client.print(_("error", "captcha"))
         except Exception as exc:
             exit_status = 1
             client.prevent_close()
+            client.gui.mark_terminated("Fatal error - check the WebUI console")
             client.print("Fatal error encountered:\n")
             trace = traceback.format_exc()
             client.print(trace)
@@ -301,6 +315,29 @@ if __name__ == "__main__":
             },
             status_code=200 if healthy else 503,
         )
+
+    @app.post("/reload")
+    async def reload_endpoint():
+        """Trigger the same reload as the Settings → Reload button.
+
+        200 once the reload has been queued, 503 while the backend is still
+        starting or has already been asked to exit (change_state is a no-op in
+        State.EXIT, so reporting success would be a lie).
+        """
+        if twitch_client is None:
+            return JSONResponse({"status": "starting"}, status_code=503)
+        if not twitch_client.gui.request_reload():
+            return JSONResponse({"status": "exiting"}, status_code=503)
+        return JSONResponse({"status": "reloading", "twitch_state": twitch_client._state.name})
+
+    @app.get("/reload")
+    async def reload_endpoint_get():
+        """GET alias for the reload endpoint for convenience."""
+        if twitch_client is None:
+            return JSONResponse({"status": "starting"}, status_code=503)
+        if not twitch_client.gui.request_reload():
+            return JSONResponse({"status": "exiting"}, status_code=503)
+        return JSONResponse({"status": "reloading", "twitch_state": twitch_client._state.name})
 
     # Start NiceGUI - this blocks until shutdown
     try:
