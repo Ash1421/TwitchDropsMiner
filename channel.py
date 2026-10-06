@@ -324,13 +324,24 @@ class Channel:
         return URLType(match.group(1))
 
     def _check_drops_enabled(self, available_drops: list[JsonType]) -> bool:
-        return any(
+        """
+        Returns True if any of the available drops campaigns can be earned by
+        this channel (ignoring channel status like online/offline).
+        """
+        result = any(
             (
                 (campaign := self._twitch._campaigns.get(campaign_data["id"])) is not None
                 and campaign.can_earn(self, ignore_channel_status=True)
             )
             for campaign_data in available_drops
         )
+        if available_drops and not result:
+            logger.log(
+                CALL,
+                f"_check_drops_enabled: {self._login} has {len(available_drops)} viewer campaigns "
+                f"but none earnable (known campaigns: {len(self._twitch._campaigns)})",
+            )
+        return result
 
     def external_update(self, channel_data: JsonType, available_drops: list[JsonType]):
         """
@@ -368,9 +379,16 @@ class Channel:
             except MinerException:
                 logger.log(CALL, f"AvailableDrops GQL call failed for channel: {self._login}")
             else:
-                stream.drops_enabled = self._check_drops_enabled(
-                    available_drops_campaigns["data"]["channel"]["viewerDropCampaigns"] or []
+                viewer_campaigns = (
+                    available_drops_campaigns.get("data", {})
+                    .get("channel", {})
+                    .get("viewerDropCampaigns", [])
                 )
+                logger.log(
+                    CALL,
+                    f"AvailableDrops for {self._login}: {len(viewer_campaigns)} campaigns",
+                )
+                stream.drops_enabled = self._check_drops_enabled(viewer_campaigns)
         return stream
 
     async def update_stream(self) -> bool:

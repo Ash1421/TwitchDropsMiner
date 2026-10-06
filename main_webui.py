@@ -22,6 +22,16 @@ if __name__ == "__main__":
     import warnings
     import traceback
 
+    # Windows consoles default to a legacy code page (cp1252), which cannot
+    # encode the symbols the GUI uses (e.g. the warning sign in grab_attention,
+    # or the channel table ticks). Force UTF-8 so a --stdlog mirror never dies
+    # mid-print; backslashreplace keeps unencodable output from raising.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
     import truststore
 
     truststore.inject_into_ssl()

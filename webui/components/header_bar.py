@@ -41,6 +41,15 @@ class HeaderBar:
                         icon="logout",
                         on_click=lambda: ui.run_javascript(AuthManager.logout_js()),
                     ).props("dense flat round").classes("ml-2")
+                # Quick link to the official Twitch Drops inventory page
+                ui.button(
+                    icon="inventory",
+                    on_click=lambda: ui.run_javascript(
+                        'window.open("https://www.twitch.tv/drops/inventory", "_blank")'
+                    ),
+                ).props("dense flat round").classes("ml-2").tooltip(
+                    _("webui", "header", "inventory_tooltip")
+                )
 
             with ui.tabs(value=initial_tab, on_change=on_tab_change).classes(
                 "w-full bg-slate-100 dark:bg-slate-700"

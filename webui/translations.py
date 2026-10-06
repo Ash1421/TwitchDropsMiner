@@ -62,6 +62,7 @@ default_webui_translation: dict[str, Any] = {
             "close_view": "Close view",
             "cancel_browser": "Cancel login",
         },
+        "header": {"inventory_tooltip": "Open Twitch Drops inventory"},
         "inventory": {"no_campaigns": "No campaigns match the current filters."},
         "game_list": {
             "no_campaigns": '"{name}" has no active drop campaigns.',
