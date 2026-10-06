@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from constants import State
 from webui.manager import WebUIManager
 
 
@@ -14,12 +15,24 @@ class _FakeAuth:
         self.user_id = None
 
 
+class _FakeAwaitableValue:
+    """Minimal stand-in for twitch.AwaitableValue."""
+
+    def __init__(self, value=None) -> None:
+        self._value = value
+
+    def get_with_default(self, default):
+        return default if self._value is None else self._value
+
+
 class _FakeTwitch:
-    def __init__(self, channels=None) -> None:
+    def __init__(self, channels=None, state=None, watching=None) -> None:
         self._auth_state = _FakeAuth()
         self.channels = channels or {}
         self._watching_task = None
         self._state_count = 0
+        self._state = state
+        self.watching_channel = _FakeAwaitableValue(watching)
 
     def state_change(self, state):
         def trigger():
@@ -28,9 +41,11 @@ class _FakeTwitch:
         return trigger
 
 
-def _manager(channels=None, *, terminated: str | None = None) -> WebUIManager:
+def _manager(
+    channels=None, *, terminated: str | None = None, state=None, watching=None
+) -> WebUIManager:
     manager = object.__new__(WebUIManager)
-    manager._twitch = _FakeTwitch(channels)
+    manager._twitch = _FakeTwitch(channels, state=state, watching=watching)
     manager._status_text = "Fetching inventory..."
     manager._terminated_reason = terminated
     manager.main_panel = SimpleNamespace(select_channel=lambda channel: None)
@@ -52,6 +67,24 @@ def test_status_summary_overrides_stale_text_when_terminated() -> None:
     ).status_summary()
     assert summary["status"] == "Fatal error - check the WebUI console"
     assert summary["terminated"] is True
+
+
+def test_status_summary_reports_state_channel_and_game() -> None:
+    game = SimpleNamespace(name="Hades II")
+    channel = SimpleNamespace(name="some_streamer", game=game)
+    summary = _manager(
+        {"1": SimpleNamespace()}, state=State.IDLE, watching=channel
+    ).status_summary()
+    assert summary["state"] == "IDLE"
+    assert summary["channel"] == "some_streamer"
+    assert summary["game"] == "Hades II"
+
+
+def test_status_summary_blanks_state_fields_when_nothing_watched() -> None:
+    summary = _manager().status_summary()
+    assert summary["state"] is None
+    assert summary["channel"] is None
+    assert summary["game"] is None
 
 
 def test_mark_terminated_sets_reason() -> None:

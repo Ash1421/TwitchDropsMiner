@@ -269,6 +269,30 @@ if __name__ == "__main__":
             status_code=200 if healthy else 503,
         )
 
+    @app.get("/status")
+    async def status():
+        """Rich status endpoint for external integrations.
+
+        Shares /health's verdict and status codes, but reports the miner's
+        detailed state machine status (state, watched channel, watched game)
+        rather than only a liveness bit. The account id is deliberately left
+        out of this payload.
+        """
+        if twitch_client is None:
+            return JSONResponse({"status": "starting"}, status_code=503)
+        healthy = (
+            exit_status == 0
+            and twitch_client.gui.running
+            and twitch_client._state is not State.EXIT
+        )
+        summary = twitch_client.gui.status_summary()
+        # status_summary()'s "status" is the human-readable status text; here
+        # "status" carries the health verdict to match /health's contract.
+        summary["message"] = summary.pop("status", None)
+        summary.pop("user_id", None)
+        summary["status"] = "ok" if healthy else "unhealthy"
+        return JSONResponse(summary, status_code=200 if healthy else 503)
+
     # Start NiceGUI - this blocks until shutdown
     try:
         success, file = lock_file(LOCK_PATH)

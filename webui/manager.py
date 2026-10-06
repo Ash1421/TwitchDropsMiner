@@ -347,17 +347,29 @@ class WebUIManager:
             and auth._logged_in.is_set()
         )
         watching_task = getattr(twitch, "_watching_task", None)
+        watching = bool(
+            self._terminated_reason is None
+            and watching_task is not None
+            and not watching_task.done()
+        )
+        state = getattr(twitch, "_state", None)
+        watching_channel = getattr(twitch, "watching_channel", None)
+        channel = (
+            watching_channel.get_with_default(None)
+            if watching_channel is not None
+            else None
+        )
+        game = getattr(channel, "game", None)
         return {
             "logged_in": logged_in,
             "user_id": getattr(auth, "user_id", None) if logged_in else None,
             "status": self._terminated_reason or self._status_text,
             "terminated": self._terminated_reason is not None,
+            "state": getattr(state, "name", None),
+            "channel": getattr(channel, "name", None),
+            "game": getattr(game, "name", None),
             "channels": len(getattr(twitch, "channels", None) or ()),
-            "watching": bool(
-                self._terminated_reason is None
-                and watching_task is not None
-                and not watching_task.done()
-            ),
+            "watching": watching,
         }
 
     async def watch_channel(self, login: str) -> tuple[bool, str]:
