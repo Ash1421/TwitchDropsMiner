@@ -6,7 +6,7 @@ from nicegui import app, ui
 from yarl import URL
 
 from translate import _
-from constants import PriorityMode, State
+from constants import PriorityMode
 from webui.html_utils import request_notification_permission_js
 
 if TYPE_CHECKING:
@@ -140,7 +140,7 @@ class GeneralSection:
                 ui.label(_("gui", "settings", "reload_text")).classes("text-xs")
                 ui.button(
                     _("gui", "settings", "reload"),
-                    on_click=manager._twitch.state_change(State.INVENTORY_FETCH),
+                    on_click=manager.request_reload,
                 ).props("dense").classes("text-xs w-full")
 
     def _on_language_change(self, language: str) -> None:

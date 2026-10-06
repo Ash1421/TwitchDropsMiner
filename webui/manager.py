@@ -295,6 +295,17 @@ class WebUIManager:
         """Clear the current drop display"""
         self.main_panel.clear_drop()
 
+    def request_reload(self) -> bool:
+        """Soft reload - same action as Settings -> Reload button.
+
+        Returns False when the backend is exiting, where change_state is a
+        no-op and reporting success would be a lie.
+        """
+        if self._twitch._state is State.EXIT:
+            return False
+        self._twitch.state_change(State.INVENTORY_FETCH)()
+        return True
+
     def restart(self) -> None:
         self._reload_requested.set()
         self._twitch.state_change(State.INVENTORY_FETCH)()
