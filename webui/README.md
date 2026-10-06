@@ -124,6 +124,8 @@ existing Chrome policy. The experiment keeps Chromium's sandbox enabled.
 
 ## Configuration
 
+### Environment variables
+
 The WebUI host, port, and authentication are configured via environment variables:
 
 - **WEBUI_HOST**: Network interface to bind to (default: `127.0.0.1` with browser login;
@@ -150,6 +152,32 @@ The WebUI host, port, and authentication are configured via environment variable
 ```bash
 WEBUI_HOST=127.0.0.1 WEBUI_PORT=8080 WEBUI_AUTH=1 SECURE_CONNECTION=1 uv run --group nicegui python main_webui.py
 ```
+
+### Settings file
+
+Persistent settings live in `config/settings.json`. The file is created on first
+run and rewritten atomically whenever a value changes from the Settings tab.
+Keys are written in the grouped order shown below rather than alphabetically.
+
+> **No comments.** The file is parsed with Python's standard `json` parser, so a
+> `//` or `/* */` line stops the miner from starting. On load, unknown keys are
+> removed and values of the wrong type are reset to their default, so only the
+> keys listed here survive a hand edit.
+
+| Key | Type | Default | Description | Change it in |
+|---|---|---|---|---|
+| `proxy` | string | `""` | Outbound HTTP proxy for all Twitch traffic, e.g. `http://127.0.0.1:8080`. Invalid or cleared values are rejected by the UI. | Settings tab |
+| `language` | string | `"English"` | UI language. Switching it reloads every connected browser and restarts the miner. | Settings tab |
+| `dark_mode` | boolean | `false` | Dark theme. | Settings tab |
+| `tray_notifications` | boolean | `true` | Ask the browser for notification permission and show desktop-style notifications. | Settings tab |
+| `priority` | array of strings | `[]` | Games to mine, most important first. | Settings tab |
+| `exclude` | array of strings | `[]` | Games that are never mined. | Settings tab |
+| `priority_mode` | integer `0`-`2` | `0` | `0` priority list only, `1` ending soonest, `2` lowest drop availability first. | Settings tab |
+| `enable_badges_emotes` | boolean | `false` | Treat campaigns rewarding chat badges or emotes as eligible even when the account is not linked to them. | Settings tab |
+| `available_drops_check` | boolean | `false` | Extra GQL query per online channel to confirm drops are actually enabled there, which costs more requests. | Settings tab |
+| `connection_quality` | integer `1`-`6` | `1` | Multiplies socket timeouts: `5 x q` to connect, `10 x q` in total. Values outside the range are clamped. | this file only |
+| `autostart_tray` | boolean | `false` | Windows registry autostart. The WebUI has no tray, so this only affects the desktop build. | this file only |
+| `priority_link_override` | boolean | `false` | Also mine unlinked games that are explicitly in `priority`. Twitch may still refuse to award those drops. | Settings tab, Advanced card |
 
 ## Features
 

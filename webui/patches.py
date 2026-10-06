@@ -14,6 +14,8 @@ import inventory as _inventory
 
 import webui.translations  # noqa
 
+# WebUI addition: appended after the core keys in settings.py, so it forms the
+# last group in config/settings.json. Documented in webui/README.md.
 _settings.default_settings["priority_link_override"] = False  # type: ignore[typeddict-unknown-key]
 
 

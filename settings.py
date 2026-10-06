@@ -25,18 +25,27 @@ class SettingsFile(TypedDict):
     priority_mode: PriorityMode
 
 
+# Declaration order is meaningful: Settings.save() writes config/settings.json
+# in this order, so related keys stay together instead of being scattered by an
+# alphabetical sort. webui/patches.py appends its own groups after these.
 default_settings: SettingsFile = {
+    # Network
     "proxy": URL(),
+    # Language and appearance
+    "language": DEFAULT_LANG,
+    "dark_mode": False,
+    "tray_notifications": True,
+    # Game selection and drop priority
     "priority": [],
     "exclude": set(),
-    "dark_mode": False,
-    "autostart_tray": False,
-    "connection_quality": 1,
-    "language": DEFAULT_LANG,
-    "tray_notifications": True,
+    "priority_mode": PriorityMode.PRIORITY_ONLY,
+    # Drop tracking behaviour
     "enable_badges_emotes": False,
     "available_drops_check": False,
-    "priority_mode": PriorityMode.PRIORITY_ONLY,
+    # Not exposed in any GUI - edit here (connection_quality is also clamped
+    # back into 1-6 on read, autostart_tray is Windows-only)
+    "connection_quality": 1,
+    "autostart_tray": False,
 }
 
 
@@ -100,4 +109,9 @@ class Settings:
 
     def save(self, *, force: bool = False) -> None:
         if self._altered or force:
-            json_save(SETTINGS_PATH, self._settings, sort=True)
+            # Write in default_settings' declaration order rather than sorted,
+            # so the file reads in groups instead of alphabetically.
+            # merge_json() on load guarantees every template key is present.
+            json_save(
+                SETTINGS_PATH, {key: self._settings[key] for key in default_settings}
+            )
