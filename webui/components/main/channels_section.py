@@ -81,6 +81,11 @@ class ChannelsSection:
         for table in self._channel_tables:
             table.selected = []
 
+    def select_channel(self, channel: "Channel") -> None:
+        """Select a channel row programmatically (e.g. the Telegram /watch)."""
+        self._selected_channel_iid = channel.iid
+        self._schedule_rebuild()
+
     def _schedule_rebuild(self) -> None:
         # Coalesce bursts of display()/remove() calls into a single rebuild.
         if not self._rebuild_scheduled:

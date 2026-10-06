@@ -99,6 +99,10 @@ class WebUIManager:
         # Shared UI state
         self._current_icon: str = "pickaxe"
         self._status_text: str = "Initializing..."
+        # Set when the backend exits with an error (captcha or a fatal
+        # exception); overrides the usually-finite status text so
+        # integrations report the real state instead of a stale one.
+        self._terminated_reason: str | None = None
 
         # Adapters - mirrors of classes in gui.py
         self.tray = TrayIconAdapter(self)
@@ -326,5 +330,87 @@ class WebUIManager:
         self.print("Application prevented from closing due to error state")
 
     def update_status(self, text: str) -> None:
-        """Update status text — bindings propagate the new value to all connected clients."""
+        """Update status text - bindings propagate the new value to all connected clients."""
         self._status_text = text
+
+    def mark_terminated(self, reason: str) -> None:
+        """Record that the backend stopped abnormally (fatal error, captcha)."""
+        self._terminated_reason = reason or "Terminated"
+
+    def status_summary(self) -> dict[str, object]:
+        """A plain snapshot for integrations (the Telegram /status command)."""
+        twitch = self._twitch
+        auth = getattr(twitch, "_auth_state", None)
+        logged_in = bool(
+            auth is not None
+            and getattr(auth, "_logged_in", None) is not None
+            and auth._logged_in.is_set()
+        )
+        watching_task = getattr(twitch, "_watching_task", None)
+        return {
+            "logged_in": logged_in,
+            "user_id": getattr(auth, "user_id", None) if logged_in else None,
+            "status": self._terminated_reason or self._status_text,
+            "terminated": self._terminated_reason is not None,
+            "channels": len(getattr(twitch, "channels", None) or ()),
+            "watching": bool(
+                self._terminated_reason is None
+                and watching_task is not None
+                and not watching_task.done()
+            ),
+        }
+
+    async def watch_channel(self, login: str) -> tuple[bool, str]:
+        """Force the miner toward a tracked stream (the Telegram /watch command).
+
+        Returns (True, "") after selecting the channel and requesting a channel
+        switch, or (False, reason) when the stream is unknown or the backend is
+        not running (e.g. after a fatal error).
+        """
+        login = (login or "").strip().lower()
+        if not login:
+            return False, "No stream given."
+        if self._terminated_reason is not None:
+            return (
+                False,
+                f"The miner is not running ({self._terminated_reason}).",
+            )
+        twitch = self._twitch
+        channel = next(
+            (
+                channel
+                for channel in (getattr(twitch, "channels", None) or {}).values()
+                if getattr(channel, "name", "").lower() == login
+            ),
+            None,
+        )
+        if channel is None:
+            return (
+                False,
+                f"Unknown stream '{login}' - add its game in the WebUI game list first.",
+            )
+        self.main_panel.select_channel(channel)
+        twitch.state_change(State.CHANNEL_SWITCH)()
+        return True, ""
+
+    def streams_summary(self) -> list[dict[str, object]]:
+        """Snapshot of every tracked streamer for the Telegram /streams command."""
+        channels = (getattr(self._twitch, "channels", None) or {}).values()
+        rows: list[dict[str, object]] = []
+        for channel in channels:
+            game = getattr(channel, "game", None)
+            rows.append(
+                {
+                    "login": getattr(channel, "_login", "")
+                    or getattr(channel, "name", ""),
+                    "display": getattr(channel, "name", ""),
+                    "online": bool(getattr(channel, "online", False)),
+                    "viewers": getattr(channel, "viewers", None),
+                    "game": game.name if game is not None else None,
+                    "drops": bool(getattr(channel, "drops_enabled", False)),
+                }
+            )
+        rows.sort(
+            key=lambda row: (not row["online"], not row["drops"], str(row["display"]).lower())
+        )
+        return rows

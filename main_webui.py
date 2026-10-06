@@ -191,10 +191,12 @@ if __name__ == "__main__":
         except CaptchaRequired:
             exit_status = 1
             client.prevent_close()
+            client.gui.mark_terminated(_("error", "captcha"))
             client.print(_("error", "captcha"))
         except Exception:
             exit_status = 1
             client.prevent_close()
+            client.gui.mark_terminated("Fatal error - check the WebUI console")
             client.print("Fatal error encountered:\n")
             client.print(traceback.format_exc())
         finally:

@@ -127,6 +127,9 @@ class MainPanel(BasePanel):
     def clear_watching_channel(self) -> None:
         self._channels_section.clear_watching()
 
+    def select_channel(self, channel) -> None:
+        self._channels_section.select_channel(channel)
+
     def get_selected_channel(self):
         return self._channels_section.get_selected()
 
