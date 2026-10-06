@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from nicegui import app, ui
 
 from webui.html_utils import favicon_js, notification_js
+from webui.notifications import notifications
 
 if TYPE_CHECKING:
     from webui.manager import WebUIManager
@@ -32,6 +33,12 @@ class TrayIconAdapter:
         pass
 
     def notify(self, message: str, title: str | None = None, duration: float = 10):
+        # Outbound delivery happens regardless of the browser preference: a
+        # headless VPS has no browser, which is exactly where these matter.
+        # The miner calls this only when a drop is claimed.
+        notifications.send(
+            "drop_claimed", title or "Twitch Drops Miner", message
+        )
         if not self._manager._twitch.settings.tray_notifications:
             return
         text = f"{title}: {message}" if title else message

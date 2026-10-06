@@ -28,8 +28,11 @@ class LoginFormAdapter:
         self._manager = manager
         self._confirm = asyncio.Event()
         self.page_url: "URL | None" = None
+        # Device-code is the default: it needs no local browser, so it also
+        # works inside a container. Set WEBUI_TWITCH_LOGIN=android-browser to
+        # opt back into the experimental browser login.
         self.browser_login_enabled = (
-            os.environ.get("WEBUI_TWITCH_LOGIN", "android-browser") == "android-browser"
+            os.environ.get("WEBUI_TWITCH_LOGIN", "") == "android-browser"
         )
         self._browser_cancel = asyncio.Event()
         if self.browser_login_enabled:
@@ -52,8 +55,12 @@ class LoginFormAdapter:
         """Show the login button and wait for the user to click it before polling begins."""
         self.page_url = page_url
         self.update(_("gui", "login", "required"), None)
+        self._manager.main_panel.set_device_code(user_code, str(page_url))
+        self._manager.print(
+            f"{_('webui', 'login', 'device_code')} {user_code}"
+        )
+        self._manager.print(str(page_url))
         self._manager.grab_attention(sound=False)
-        self._manager.print(_("gui", "login", "request"))
         await self.wait_for_login_press()
 
     def confirm(self) -> None:

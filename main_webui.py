@@ -54,7 +54,30 @@ if __name__ == "__main__":
     )
     from webui.auth import AuthManager
     from webui.ssl import get_ssl_kwargs
+    from webui.notifications import notifications
     from fastapi.responses import JSONResponse
+
+    def notify_fatal_error(exc: BaseException, trace: str) -> None:
+        """
+        Report a crash without shipping the whole traceback off-box.
+
+        The full traceback stays in the local log; only the exception line and
+        the deepest application frame travel, which is enough to identify the
+        failure without pushing file paths or environment details to a chat
+        service.
+        """
+        frames = [
+            line.strip()
+            for line in trace.splitlines()
+            if line.strip().startswith("File ")
+        ]
+        location = frames[-1] if frames else "unknown location"
+        body = f"{type(exc).__name__}: {exc}\nAt: {location}"
+        try:
+            notifications.send("fatal_error", "Miner stopped with a fatal error", body)
+        except Exception:
+            # Never let the crash reporter mask the original crash.
+            pass
 
     # Apply webui-only monkey-patches before constructing Settings/Twitch.
     import webui.patches  # noqa
@@ -182,6 +205,18 @@ if __name__ == "__main__":
         client = Twitch(settings)
         twitch_client = client
 
+        # Tell the configured chat/webhook that the container came back up
+        # (e.g. after a watchtower update restart).
+        try:
+            await asyncio.to_thread(
+                notifications.send,
+                "startup",
+                "Miner is online",
+                "The container started up successfully.",
+            )
+        except Exception:
+            pass
+
         loop = asyncio.get_running_loop()
         if sys.platform == "linux":
             loop.add_signal_handler(signal.SIGINT, lambda *_: client.gui.close())
@@ -193,12 +228,14 @@ if __name__ == "__main__":
             client.prevent_close()
             client.gui.mark_terminated(_("error", "captcha"))
             client.print(_("error", "captcha"))
-        except Exception:
+        except Exception as exc:
             exit_status = 1
             client.prevent_close()
             client.gui.mark_terminated("Fatal error - check the WebUI console")
             client.print("Fatal error encountered:\n")
-            client.print(traceback.format_exc())
+            trace = traceback.format_exc()
+            client.print(trace)
+            notify_fatal_error(exc, trace)
         finally:
             if sys.platform == "linux":
                 loop.remove_signal_handler(signal.SIGINT)

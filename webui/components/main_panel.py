@@ -69,6 +69,9 @@ class MainPanel(BasePanel):
     def update_login(self, status: str, user_id: int | None) -> None:
         self._login_section.update(status, user_id)
 
+    def set_device_code(self, user_code: str, page_url: str) -> None:
+        self._login_section.set_device_code(user_code, page_url)
+
     def update_browser_login(
         self,
         *,

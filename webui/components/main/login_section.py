@@ -25,16 +25,26 @@ class LoginSection:
         self._browser_message = ""
         self._browser_starting = False
         self._browser_dialogs: list[ui.dialog] = []
+        self._device_code: str = ""
+        self._device_url: str = ""
 
     def update(self, status: str, user_id: int | None) -> None:
         self._login_state = self._key_for_status(status)
         self._user_str = str(user_id) if user_id is not None else "-"
         self._btn_enabled = True
+        if self._login_state != "required":
+            self._device_code = ""
+            self._device_url = ""
         if self._popup_maybe_open and self._login_state == "logged_in":
             self._close_login_popup()
         if self._login_state == "logged_in":
             for dialog in self._browser_dialogs:
                 dialog.close()
+
+    def set_device_code(self, user_code: str, page_url: str) -> None:
+        """Show the device activation code under the login button."""
+        self._device_code = user_code
+        self._device_url = page_url
 
     def update_browser(
         self,
@@ -149,6 +159,60 @@ class LoginSection:
                     or (s == "logging_in" and self._manager.login.browser_login_enabled)
                 ),
             ).bind_enabled_from(self, "_btn_enabled")
+            with ui.column().classes("gap-0 w-full").bind_visibility_from(
+                self, "_device_code", backward=lambda code: bool(code)
+            ):
+                ui.label(_("webui", "login", "device_code")).classes(
+                    "text-xxs text-grey-7"
+                )
+                ui.label().classes(
+                    "text-base font-mono font-bold break-all"
+                ).bind_text_from(self, "_device_code")
+                ui.label().classes(
+                    "text-xxs break-all"
+                ).bind_text_from(self, "_device_url")
+            self._build_restore_section()
+
+    def _build_restore_section(self) -> None:
+        with (
+            ui.expansion(
+                _("webui", "login", "restore_title"), icon="cookie"
+            )
+            .classes("w-full")
+            .bind_visibility_from(
+                self,
+                "_login_state",
+                backward=lambda s: s not in ("logged_in",),
+            )
+        ):
+            ui.label(_("webui", "login", "restore_hint")).classes(
+                "text-xs whitespace-pre-wrap leading-relaxed"
+            )
+            self._restore_token_input = ui.input(
+                _("webui", "login", "restore_token")
+            ).props("outlined dense clearable").classes("w-full")
+            ui.button(
+                _("webui", "login", "restore_button"),
+                on_click=self._on_restore_click,
+                icon="play_arrow",
+            ).props("dense outline").classes("text-xs")
+            ui.upload(
+                label=_("webui", "login", "restore_upload"),
+                auto_upload=True,
+                on_upload=self._on_restore_upload,
+                max_files=1,
+            ).props("dense flat").classes("w-full")
+
+    async def _on_restore_click(self) -> None:
+        ok, message = await self._manager.import_auth_token(
+            self._restore_token_input.value
+        )
+        ui.notify(message, type="positive" if ok else "negative")
+
+    async def _on_restore_upload(self, event) -> None:
+        data = event.content.read()
+        ok, message = await self._manager.import_auth_token_file(data)
+        ui.notify(message, type="positive" if ok else "negative")
 
     async def _open_login_popup(self) -> None:
         url = self._manager.login.page_url

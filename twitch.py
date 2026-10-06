@@ -152,6 +152,13 @@ class _AuthState:
                     #     "verification_uri": "https://www.twitch.tv/activate?device-code=ABCDEFGH"
                     # }
                     response_json: JsonType = await response.json()
+                    if "device_code" not in response_json:
+                        # Twitch rejected this client id ("invalid client" for
+                        # e.g. WEB/ANDROID_APP) or retired the device flow. Keep
+                        # the app alive for a session restore via the WebUI
+                        # instead of crashing on the missing key.
+                        await asyncio.sleep(60)
+                        raise RequestInvalid()
                     device_code: str = response_json["device_code"]
                     user_code: str = response_json["user_code"]
                     interval: int = response_json["interval"]

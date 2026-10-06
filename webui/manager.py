@@ -36,12 +36,16 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nicegui import ui, Client, app
 
-from constants import OUTPUT_FORMATTER, FILE_FORMATTER, State
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+
+from constants import CONFIG_PATH, COOKIES_PATH, OUTPUT_FORMATTER, FILE_FORMATTER, State
 from translate import _
 from .adapters import (
     TrayIconAdapter,
@@ -57,6 +61,12 @@ from .adapters import (
     HelpTabAdapter,
 )
 from .handlers import WebUIOutputHandler
+from .notifications import (
+    AVATAR_EXTENSIONS,
+    DEFAULT_BOT_NAME,
+    bot_display_name,
+    notifications,
+)
 from .html_utils import favicon_js, request_notification_permission_js
 from .components import (
     BasePanel,
@@ -96,9 +106,14 @@ class WebUIManager:
         self._reload_requested = asyncio.Event()
         self._running = False
 
+        # Outbound notifications read their targets from the same settings
+        # object the UI writes to.
+        notifications.bind(twitch.settings)
+
         # Shared UI state
         self._current_icon: str = "pickaxe"
         self._status_text: str = "Initializing..."
+        self._bot_name_text: str = DEFAULT_BOT_NAME
         # Set when the backend exits with an error (captcha or a fatal
         # exception); overrides the usually-finite status text so
         # integrations report the real state instead of a stale one.
@@ -124,6 +139,11 @@ class WebUIManager:
         self.settings_panel: BasePanel = SettingsPanel(self)
         self.help_panel: BasePanel = HelpPanel(self)
 
+        # Two-way Telegram integration (long-poll command bot).
+        from .telegram_bot import TelegramCommandPoller
+
+        self.telegram: TelegramCommandPoller = TelegramCommandPoller(self)
+
         self._setup_ui()
 
         # Use the same log formatter as gui.py's _TKOutputHandler so messages look identical.
@@ -138,8 +158,19 @@ class WebUIManager:
         per browser connection, building the full UI for that client."""
         app.add_static_files("/icons", str(Path(__file__).parent.parent / "icons"))
 
+        @app.get("/avatar")
+        def _avatar() -> FileResponse:
+            """Serve a locally stored avatar upload so tests can embed it and
+            a publicly reachable deployment can feed it to Discord."""
+            for ext, mime in AVATAR_EXTENSIONS.items():
+                path = CONFIG_PATH / f"avatar{ext}"
+                if path.exists():
+                    return FileResponse(path, media_type=mime)
+            raise HTTPException(status_code=404, detail="no avatar uploaded")
+
         @ui.page("/")
         def index(tab: str = "main"):
+            self._bot_name_text = bot_display_name(self._twitch.settings)
             ui.page_title("Twitch Drops Miner")
             ui.dark_mode(self._twitch.settings.dark_mode).bind_value_from(
                 self._twitch.settings, "dark_mode"
@@ -218,6 +249,14 @@ class WebUIManager:
         self._twitch.settings.dark_mode = enabled
         self._twitch.settings.save(force=True)
 
+    def apply_bot_name(self, name: str) -> None:
+        """Recompute the header label after a bot-name edit."""
+        self._refresh_header()
+
+    def _refresh_header(self) -> None:
+        """Recompute the header label, which always shows the bot identity."""
+        self._bot_name_text = bot_display_name(self._twitch.settings)
+
     @property
     def running(self) -> bool:
         return self._running
@@ -249,7 +288,22 @@ class WebUIManager:
             print(FILE_FORMATTER.format(record))
 
     def close(self, *args) -> int:
-        """Signal the main loop to shut down (mirrors GUIManager.close)."""
+        """Signal the main loop to shut down (mirrors GUIManager.close).
+
+        Runs on SIGTERM/SIGINT - i.e. ``docker stop`` or a watchtower/autoheal
+        restart - so this is the one reliable place to tell the user the
+        container is going down. Best-effort: a webhook must never block the
+        shutdown.
+        """
+        try:
+            notifications.send(
+                "shutdown",
+                "Miner is stopping",
+                "The container is shutting down or being restarted "
+                "(watchtower/autoheal update, or a `docker stop`).",
+            )
+        except Exception:
+            pass
         self._close_requested.set()
         self._twitch.close()
         return 0
@@ -271,6 +325,7 @@ class WebUIManager:
 
     def start(self):
         self._running = True
+        self.telegram.start()
 
     async def coro_unless_closed(self, coro):
         """Run coro, but raise ExitRequest or ReloadRequest if those are signalled first."""
@@ -307,6 +362,57 @@ class WebUIManager:
         self.channels.clear()
         await self._invalidate_token()
         self.restart()
+
+    async def import_auth_token(self, token: str) -> tuple[bool, str]:
+        """Restore a Twitch session from an ``auth-token`` cookie value.
+
+        The token is validated against id.twitch.tv/oauth2/validate *before*
+        the persisted jar is touched, so a token minted for a different client
+        can never put the app into the login crash loop (the cookie-client
+        mismatch branch in ``twitch._validate`` deletes the jar and falls into
+        the retired device flow). On success the jar is rewritten with just the
+        auth-token cookie and the backend restarts, which re-runs ``_validate``
+        in ``get_auth`` and completes the login.
+
+        Returns (ok, message).
+        """
+        token = (token or "").strip()
+        if not token:
+            return False, _("webui", "login", "restore_empty")
+        client = self._twitch._client_type
+        async with self._twitch.request(
+            "GET",
+            "https://id.twitch.tv/oauth2/validate",
+            headers={"Authorization": f"OAuth {token}"},
+        ) as response:
+            if response.status != 200:
+                return False, _("webui", "login", "restore_invalid")
+            validate_response = await response.json()
+        if validate_response.get("client_id") != client.CLIENT_ID:
+            return False, _("webui", "login", "restore_client").format(
+                actual=validate_response.get("client_id")
+            )
+        session = await self._twitch.get_session()
+        jar = session.cookie_jar
+        jar.clear()
+        auth_cookie = SimpleCookie()
+        auth_cookie["auth-token"] = token
+        auth_cookie["auth-token"]["domain"] = client.CLIENT_URL.host
+        auth_cookie["auth-token"]["path"] = "/"
+        jar.update_cookies(auth_cookie, client.CLIENT_URL)
+        jar.save(COOKIES_PATH)
+        self.print(_("webui", "login", "restore_ok"))
+        self.restart()
+        return True, _("webui", "login", "restore_ok")
+
+    async def import_auth_token_file(self, data: bytes) -> tuple[bool, str]:
+        """Restore a Twitch session from an exported cookie file."""
+        from .cookie_import import extract_auth_token
+
+        token = extract_auth_token(data)
+        if token is None:
+            return False, _("webui", "login", "restore_no_token")
+        return await self.import_auth_token(token)
 
     def display_drop(self, drop, *, countdown: bool = True, subone: bool = False):
         """Display current drop information"""

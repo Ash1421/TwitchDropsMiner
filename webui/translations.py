@@ -30,6 +30,57 @@ default_webui_translation: dict[str, Any] = {
                 "priority_link_override": "Mine unlinked games from the Priority List: "
             },
             "general": {"language": "Language: ", "invalid_proxy": "Invalid proxy URL"},
+            "webhooks": {
+                "name": "Notifications",
+                "hint": "Discord uses an incoming webhook and is one-way. "
+                "Telegram can reply to messages once the bot is connected.",
+                "bot_name": "Webhook / bot name:",
+                "avatar_url": "Avatar URL:",
+                "avatar_upload": "Upload avatar image",
+                "avatar_rejected": "Unsupported image type",
+                "avatar_hint": "PNG/JPG/GIF/WebP, up to 5 MB. An uploaded file is "
+                "stored on this device and served from this app's `/avatar`, so "
+                "Discord can fetch it only if this address is reachable from the "
+                "internet (public host or port-forward). Leave empty to keep the "
+                "icon configured on the webhook itself — the pickaxe.",
+                "avatar_uploaded": "Avatar uploaded — served from {url}",
+                "embed_color": "Embed color:",
+                "color_hex": "Hex",
+                "color_rgb": "RGB",
+                "reset": "Reset to default",
+                "secret_configured": "Already set — leave blank to keep the stored value",
+                "discord_url": "Discord webhook URL:",
+                "telegram_token": "Telegram bot token:",
+                "telegram_chat": "Telegram chat ID:",
+                "telegram_commands_hint": "Once both fields are set, the bot answers /start, /help, /status, /streams, /test, /testdiscord and /watch <stream> in that chat.",
+                "telegram_guide": "How to create a Telegram bot",
+                "telegram_guide_md": (
+                    "1. Send `/newbot` to [@BotFather](https://t.me/BotFather) "
+                    "on Telegram and follow the prompts.\n"
+                    "2. Copy the token it gives you (`123456:ABC-DEF...`) into the "
+                    "field above.\n"
+                    "3. To find your chat ID, message [@userinfobot](https://t.me/userinfobot) "
+                    "and read the `id` from its reply, or call "
+                    "`https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser.\n\n"
+                    "Once both fields are set, the bot answers slash commands in "
+                    "that chat: `/help`, `/status`, `/streams`, `/test`, "
+                    "`/testdiscord`, `/watch <stream>` and `/start`.\n\n"
+                    "The official guide lives here: "
+                    "[Bots: An introduction for developers](https://core.telegram.org/bots)."
+                ),
+                "events": "Send a message when:",
+                "event_drop_claimed": "a drop is claimed",
+                "event_campaign_complete": "a campaign is completed",
+                "event_channel_switch": "the watched channel changes",
+                "event_fatal_error": "the miner hits a fatal error",
+                "event_startup": "the container starts up",
+                "event_shutdown": "the container is stopping / restarting",
+                "test_hint": "Secrets are stored in config/settings.json, which is "
+                "gitignored. Fields show the stored value behind the eye toggle; "
+                "clearing a secret field removes it.",
+                "test_discord": "Test Discord",
+                "test_telegram": "Test Telegram",
+            },
         },
         "help": {
             "about": "About",
@@ -58,6 +109,27 @@ default_webui_translation: dict[str, Any] = {
             "show_browser": "Show login browser",
             "close_view": "Close view",
             "cancel_browser": "Cancel login",
+            "restore_title": "Stuck on login? Restore a saved Twitch session",
+            "restore_hint": (
+                "Log in via the Login button and enter the device code shown "
+                "in the box above. If that flow is unavailable, restore a "
+                "saved browser session instead:\n"
+                "1) Sign in to twitch.tv in a browser\n"
+                "2) DevTools → Application → Cookies → www.twitch.tv\n"
+                "3) Copy the \"auth-token\" value\n\n"
+                "A token is a full session credential — never share it."
+            ),
+            "restore_token": "Paste the Twitch auth-token",
+            "restore_button": "Restore & re-login",
+            "restore_upload": "…or upload cookies.jar / cookies.txt",
+            "restore_empty": "No auth-token entered.",
+            "restore_invalid": "Twitch rejected that token. Export a fresh one.",
+            "restore_no_token": "No auth-token cookie was found in that file.",
+            "restore_client": (
+                "That token belongs to a different Twitch client (got {actual})."
+            ),
+            "restore_ok": "Twitch session restored. Re-authenticating…",
+            "device_code": "Enter this code on the Twitch device activation page:",
         },
         "inventory": {"no_campaigns": "No campaigns match the current filters."},
         "game_list": {

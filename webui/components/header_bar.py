@@ -31,7 +31,9 @@ class HeaderBar:
                 "w-full items-center q-px-lg q-py-md bg-slate-200 dark:bg-slate-900"
             ):
                 ui.image("/icons/pickaxe.ico").classes("w-8 h-8")
-                ui.label("Twitch Drops Miner").classes("text-h6")
+                ui.label().classes("text-h6").bind_text_from(
+                    self._manager, "_bot_name_text"
+                )
                 ui.space()
                 ui.label().classes(
                     "text-body1 q-px-md q-py-xs rounded-borders bg-slate-300 dark:bg-slate-800"
